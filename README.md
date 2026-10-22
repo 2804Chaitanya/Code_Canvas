@@ -2,8 +2,6 @@
 
 <div align="center">
 
-![CodeCanvas Banner](frontend/src/assets/logo.CC.png)
-
 **A Next-Generation Real-Time Collaborative Coding, Problem-Solving & Social Hub for Programmers**
 
 [![React](https://img.shields.io/badge/React-19.1.0-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
