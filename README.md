@@ -88,69 +88,66 @@ CodeCanvas follows a **decoupled, event-driven multi-tier architecture** designe
 
 ```mermaid
 flowchart TD
-    subgraph Presentation ["1. Presentation Layer (Frontend - React 19 + Vite)"]
-        direction TB
-        UI["Web App & Reactive UI (Dashboard, Rooms, Calendar)"]
-        Editor["CodeMirror 6 In-Browser IDE (AST Syntax Highlighting)"]
-        WS_Client["Socket.io WebSocket Client (Real-Time State Sync)"]
-        Auth_State["Client Auth Guard & Local Storage (JWT Handler)"]
+    subgraph Presentation["1. Presentation Layer (Frontend - React 19 + Vite)"]
+        UI["Web App and Reactive UI"]
+        Editor["CodeMirror 6 In-Browser Editor"]
+        WS_Client["Socket.io Client"]
+        Auth_State["Client Auth Guard and Token Storage"]
         UI --- Editor
         UI --- WS_Client
         UI --- Auth_State
     end
 
-    subgraph Gateway ["2. Gateway & Security Layer (Express 5 HTTP + WS Engine)"]
-        direction TB
-        CORS["CORS Policy & Security Headers"]
-        Parser["Body Parser & JSON Payload Sanitizer"]
-        JWT_MW["JWT Authentication & Token Validation Middleware"]
-        CORS --> Parser --> JWT_MW
+    subgraph Gateway["2. Gateway and Security Layer (Express 5)"]
+        CORS["CORS Policy and Headers"]
+        Parser["Body Parser and JSON Sanitizer"]
+        JWT_MW["JWT Auth Middleware"]
+        CORS --> Parser
+        Parser --> JWT_MW
     end
 
-    subgraph Services ["3. Application & Micro-Service Layer"]
-        direction TB
-        RoomService["Room & Presence Manager (Dual-Buffer Sync: Code & Stdin)"]
-        JudgeService["Remote Judge & Execution Pipeline (Piston Integration)"]
-        ProblemService["Problem Aggregator & Dynamic Tag Filter Engine"]
-        DiscussionService["Community Discussion & Voting Engine"]
-        ProfileService["User Profile & Codeforces Stats Synchronizer"]
+    subgraph Services["3. Application Service Layer"]
+        RoomService["Room and Presence Manager"]
+        JudgeService["Remote Judge Execution Pipeline"]
+        ProblemService["Problem Aggregator and Tag Filter"]
+        DiscussionService["Community Discussion and Voting"]
+        ProfileService["User Profile and Codeforces Sync"]
     end
 
-    subgraph Storage ["4. Data Persistence Layer (MongoDB + Mongoose 8 ODM)"]
-        direction TB
-        M_User[("Users Collection (Credentials, Skills, Profiles)")]
-        M_Solution[("Solutions Collection (Codes, Languages, Votes)")]
-        M_Discussion[("Discussions Collection (Threads & Nested Comments)")]
-        M_Message[("Chat Messages Collection (Room History)")]
-        M_Bookmark[("Bookmarks Collection (Saved Solutions)")]
+    subgraph Storage["4. Database Layer (MongoDB + Mongoose 8)"]
+        M_User[("Users Collection")]
+        M_Solution[("Solutions Collection")]
+        M_Discussion[("Discussions Collection")]
+        M_Message[("Chat Messages Collection")]
+        M_Bookmark[("Bookmarks Collection")]
     end
 
-    subgraph External ["5. External Infrastructure & Cloud Services"]
-        direction TB
-        PistonAPI["Piston Code Execution Engine (Multi-Language Sandbox)"]
-        LeetAPI["LeetCode Contest & Problem Dataset API"]
-        CFAPI["Codeforces User Statistics API"]
+    subgraph External["5. External Cloud APIs"]
+        PistonAPI["Piston Code Execution Sandbox"]
+        LeetAPI["LeetCode Contest and Problem API"]
+        CFAPI["Codeforces Statistics API"]
     end
 
-    Presentation -->|HTTP REST Requests (Bearer Token)| Gateway
-    WS_Client <-->|Bi-directional WebSockets (ws://)| RoomService
+    UI -->|"HTTP Requests with Bearer Token"| CORS
+    WS_Client -->|"Real-Time WebSocket Events"| RoomService
+    RoomService -->|"Real-Time Broadcasts"| WS_Client
 
     JWT_MW --> ProblemService
     JWT_MW --> DiscussionService
     JWT_MW --> JudgeService
     JWT_MW --> ProfileService
 
-    RoomService -->|Persist Chat| M_Message
-    DiscussionService <--> M_Discussion
-    ProfileService <--> M_User
-    ProfileService <-->|Fetch Ratings| CFAPI
-    ProblemService <-->|Fetch Metadata| LeetAPI
-    
-    JudgeService -->|1. Fetch Test Cases| LeetAPI
-    JudgeService -->|2. Execute Code in Sandbox| PistonAPI
-    JudgeService -->|3. Save Accepted Solutions| M_Solution
-    M_User -.->|References| M_Solution
-    M_User -.->|References| M_Discussion
+    RoomService -->|"Persist Chat History"| M_Message
+    DiscussionService -->|"Read and Write Threads"| M_Discussion
+    ProfileService -->|"Read and Update Profiles"| M_User
+    ProfileService -->|"Fetch Rating Data"| CFAPI
+    ProblemService -->|"Fetch Problem Catalog"| LeetAPI
+
+    JudgeService -->|"1. Ingest Test Cases"| LeetAPI
+    JudgeService -->|"2. Execute in Sandbox"| PistonAPI
+    JudgeService -->|"3. Save Passed Solutions"| M_Solution
+    M_User -.->|"References"| M_Solution
+    M_User -.->|"References"| M_Discussion
 ```
 
 ### Detailed Workflow Sequences
@@ -166,50 +163,50 @@ sequenceDiagram
     participant ClientB as Client B (CodeMirror)
     actor PeerB as Peer B (Collaborator)
 
-    PeerA->>ClientA: Types code or edits input
-    ClientA->>Server: emit("text-edit", code) / emit("input-edit", input)
-    Server->>Server: Update in-memory room buffer (rooms.sharedText)
-    Server-->>ClientB: broadcast.to(roomId).emit("text-edit", code)
-    ClientB->>PeerB: Editor buffer updates in real-time (<50ms)
+    PeerA->>ClientA: Types code or edits custom input
+    ClientA->>Server: Emit text-edit or input-edit event
+    Server->>Server: Update in-memory room buffer
+    Server-->>ClientB: Broadcast text-edit or input-edit
+    ClientB->>PeerB: Editor buffer updates in real-time
 
     PeerA->>ClientA: Sends message in room chat
-    ClientA->>Server: emit("send-msg", { roomId, message, username })
-    Server->>DB: Save Message to MongoDB
-    Server-->>ClientA: emit("recieve-msg", messageData)
-    Server-->>ClientB: emit("recieve-msg", messageData)
+    ClientA->>Server: Emit send-msg event with room ID
+    Server->>DB: Save message document to MongoDB
+    Server-->>ClientA: Deliver message (recieve-msg)
+    Server-->>ClientB: Deliver message (recieve-msg)
 ```
 
-#### 2. Code Execution & Automated Verification Pipeline
+#### 2. Code Execution and Automated Verification Pipeline
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as Developer
     participant UI as CodeCanvas UI
-    participant Backend as Express Judge API (/api/solutions/submit)
+    participant Backend as Express Judge API
     participant LeetCode as LeetCode API
     participant Piston as Piston Sandbox Engine
     participant DB as MongoDB (Solutions)
 
-    User->>UI: Clicks "Submit Solution"
-    UI->>Backend: POST /api/solutions/submit (Bearer token, code, lang, slug)
-    Backend->>Backend: Validate JWT token & check payload
-    Backend->>LeetCode: GET /select?titleSlug={problemSlug}
-    LeetCode-->>Backend: Returns problem data & exampleTestcases
-    Backend->>Backend: Parse exampleTestcases into inputs & expected outputs
-    
+    User->>UI: Clicks Submit Solution
+    UI->>Backend: POST submission with code and JWT
+    Backend->>Backend: Validate JWT token and payload
+    Backend->>LeetCode: Fetch problem details and test cases
+    LeetCode-->>Backend: Returns problem data and test cases
+    Backend->>Backend: Parse test cases into inputs and expected outputs
+
     loop For Each Test Case
-        Backend->>Piston: POST /api/v2/piston/execute (language, code, stdin)
-        Piston-->>Backend: stdout, stderr, run time, exit code
+        Backend->>Piston: Execute code with test case stdin
+        Piston-->>Backend: Return stdout, stderr, and exit status
         Backend->>Backend: Compare actual output with expected output
     end
 
     alt All Tests Passed
-        Backend->>DB: Save Solution (problemSlug, code, language, authorId)
-        Backend-->>UI: 200 OK (passed: true, testResults: [...])
-        UI->>User: Display Success Banner & Confetti
+        Backend->>DB: Save accepted solution to MongoDB
+        Backend-->>UI: 200 OK with testResults (passed = true)
+        UI->>User: Display Success Notification
     else Any Test Failed
-        Backend-->>UI: 200 OK (passed: false, testResults: [...], error details)
-        UI->>User: Display Test Case Mismatch & Diagnostics
+        Backend-->>UI: 200 OK with testResults (passed = false)
+        UI->>User: Display Test Failure and Diagnostics
     end
 ```
 
